@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>3D Whale Viewer</title>
     <style>
+        /* 移除默认边距，防止滚动条 */
         body { margin: 0; overflow: hidden; background-color: #333; }
         #info {
             position: absolute;
@@ -14,6 +15,8 @@
             font-family: Arial, sans-serif;
             pointer-events: none;
             z-index: 10;
+            background-color: rgba(0,0,0,0.5); /* 半透明背景让文字更清晰 */
+            padding: 5px 0;
         }
     </style>
     <script type="importmap">
@@ -26,7 +29,7 @@
     </script>
 </head>
 <body>
-    <div id="info">正在加载模型...<br>左键旋转，右键平移，滚轮缩放</div>
+    <div id="info">正在初始化...</div>
 
     <script type="module">
         import * as THREE from 'three';
@@ -34,75 +37,104 @@
         import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
         import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 
-        // 1. 初始化场景、相机和渲染器
+        // 1. 基础场景设置
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xa0a0a0); // 背景色
-        // 添加环境雾气，让远处更自然
-        scene.fog = new THREE.Fog(0xa0a0a0, 10, 50);
+        scene.background = new THREE.Color(0x333333); // 深灰色背景
+
+        // 添加辅助网格 (地面) - 如果看到这个，说明渲染器工作正常
+        const gridHelper = new THREE.GridHelper(20, 20);
+        scene.add(gridHelper);
+
+        // 添加坐标轴 (红=X, 绿=Y, 蓝=Z)
+        const axesHelper = new THREE.AxesHelper(5);
+        scene.add(axesHelper);
 
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(5, 5, 10); // 设置相机初始位置
+        camera.position.set(5, 5, 10); // 相机位置
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true }); // 开启抗锯齿
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        // 2. 添加灯光 (没有灯光模型就是黑的)
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // 环境光
+        // 2. 灯光 (前后左右上下都有光，防止模型太黑)
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
         scene.add(ambientLight);
-
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1); // 平行光（模仿太阳）
+        
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
         dirLight.position.set(5, 10, 7);
         scene.add(dirLight);
+        
+        const backLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        backLight.position.set(-5, -5, -10);
+        scene.add(backLight);
 
-        // 3. 添加控制器 (鼠标交互)
+        // 3. 控制器
         const controls = new OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true; // 开启阻尼，更有手感
+        controls.enableDamping = true;
 
-        // 4. 加载 MTL 材质 和 OBJ 模型
+        // 4. 加载模型
         const mtlLoader = new MTLLoader();
         
-        // --- 请在这里修改你的文件名 ---
-        const fileName = 'j'; // 假设你的文件叫 model.obj 和 model.mtl
-        // ---------------------------
+        // --- 核心修改：文件名设定为 j ---
+        const fileName = 'j'; 
+        // -----------------------------
+
+        document.getElementById('info').innerHTML = "正在下载材质文件 (j.mtl)...";
 
         mtlLoader.load(`${fileName}.mtl`, (materials) => {
             materials.preload();
             
             const objLoader = new OBJLoader();
-            objLoader.setMaterials(materials); // 关键：把材质赋给模型加载器
+            objLoader.setMaterials(materials);
             
+            document.getElementById('info').innerHTML = "正在下载模型文件 (j.obj)...";
+
             objLoader.load(`${fileName}.obj`, (object) => {
                 
-                // 自动调整模型大小和位置，确保它在屏幕中心
+                // --- 自动修复位置和大小的核心代码 ---
+                
+                // 1. 获取模型的包围盒
                 const box = new THREE.Box3().setFromObject(object);
                 const size = box.getSize(new THREE.Vector3());
                 const center = box.getCenter(new THREE.Vector3());
-                
-                // 居中模型
-                object.position.x += (object.position.x - center.x);
-                object.position.y += (object.position.y - center.y);
-                object.position.z += (object.position.z - center.z);
-                
+
+                console.log("模型原始尺寸:", size);
+                console.log("模型原始中心:", center);
+
+                // 2. 居中模型 (抵消掉原始模型的偏移)
+                object.position.x -= center.x;
+                object.position.y -= center.y;
+                object.position.z -= center.z;
+
+                // 3. 自动缩放 (统一缩放到 5 个单位大小)
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const scaleFactor = 5 / (maxDim || 1); 
+                object.scale.set(scaleFactor, scaleFactor, scaleFactor);
+
                 scene.add(object);
                 
-                document.getElementById('info').innerHTML = "模型加载完成！";
-                console.log("模型加载成功", object);
+                document.getElementById('info').innerHTML = "加载完成！按住左键旋转，右键平移，滚轮缩放";
+                console.log("模型已修正并添加到场景");
 
             }, (xhr) => {
-                // 加载进度
                 if (xhr.lengthComputable) {
-                    const percentComplete = xhr.loaded / xhr.total * 100;
-                    console.log('加载进度: ' + Math.round(percentComplete, 2) + '%');
+                    const percent = Math.round((xhr.loaded / xhr.total) * 100);
+                    document.getElementById('info').innerHTML = `模型加载中: ${percent}%`;
                 }
             }, (error) => {
-                console.error('加载出错:', error);
-                document.getElementById('info').innerHTML = "加载出错，请查看控制台 (F12)";
+                console.error('加载OBJ失败:', error);
+                document.getElementById('info').innerHTML = "OBJ加载失败，请看F12控制台";
             });
+
+        }, (xhr) => {
+            // MTL 加载进度
+        }, (error) => {
+            console.error('加载MTL失败:', error);
+            document.getElementById('info').innerHTML = "MTL加载失败 (检查文件名j.mtl?)";
         });
 
-        // 5. 渲染循环
+        // 5. 动画循环
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
@@ -110,7 +142,7 @@
         }
         animate();
 
-        // 窗口大小调整处理
+        // 窗口大小适配
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
@@ -118,5 +150,4 @@
         });
     </script>
 </body>
-
 </html>

@@ -2,14 +2,13 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <title>3D Whale - 强力贴图版</title>
+    <title>3D Whale - X光骨架模式</title>
     <style>
-        /* ⚠️ 注意：我把背景改成了深蓝色，方便你确认代码是否更新 */
-        body { margin: 0; overflow: hidden; background-color: #001e36; }
+        body { margin: 0; overflow: hidden; background-color: #111; } /* 纯黑背景 */
         #info {
             position: absolute; top: 10px; width: 100%; text-align: center;
-            color: #fff; font-family: Arial, sans-serif; pointer-events: none;
-            z-index: 10; background-color: rgba(0,0,0,0.5); padding: 10px 0;
+            color: #ff0000; font-weight: bold; font-family: monospace; pointer-events: none;
+            z-index: 10; background-color: rgba(255,255,255,0.1); padding: 10px 0;
         }
     </style>
     <script type="importmap">
@@ -22,17 +21,17 @@
     </script>
 </head>
 <body>
-    <div id="info">如果背景不是深蓝色，请强制刷新！</div>
+    <div id="info">正在启动 X光骨架模式...</div>
 
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
-        // 1. 场景设置
+        // 1. 场景
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x001e36); // 深蓝色背景
-        
+        scene.background = new THREE.Color(0x111111); // 黑色背景，红线更明显
+
         // 辅助网格
         scene.add(new THREE.GridHelper(20, 20)); 
         scene.add(new THREE.AxesHelper(5));
@@ -47,38 +46,20 @@
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
 
-        // 灯光
-        scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-        dirLight.position.set(5, 10, 5);
-        scene.add(dirLight);
-
-        // 2. 手动加载贴图 (绕过 .mtl)
-        const textureLoader = new THREE.TextureLoader();
-        
-        // ⚠️ 确保这个文件名和 GitHub 上一模一样！
-        const bodyTexture = textureLoader.load('whale_sp1_body_BaseColor.png', 
-            () => console.log("贴图加载成功"),
-            undefined,
-            (err) => console.error("贴图加载失败:", err)
-        );
-        bodyTexture.colorSpace = THREE.SRGBColorSpace;
-
-        // 3. 加载 OBJ
+        // 2. 加载器
         const objLoader = new OBJLoader();
         const fileName = 'j.obj'; 
 
-        document.getElementById('info').innerHTML = "正在下载模型...";
+        document.getElementById('info').innerHTML = "正在读取 j.obj 数据...";
 
         objLoader.load(fileName, (object) => {
             
-            // A. 自动缩放与居中
+            // A. 计算尺寸与居中
             const box = new THREE.Box3().setFromObject(object);
             const size = box.getSize(new THREE.Vector3());
             const center = box.getCenter(new THREE.Vector3());
             
-            // 注意：这里的新日志没有“原始”二字，以此区分新旧代码
-            console.log("模型尺寸:", size); 
+            console.log("模型数据检测:", size);
 
             object.position.x -= center.x;
             object.position.y -= center.y;
@@ -88,28 +69,34 @@
             const scale = 5 / (maxDim || 1);
             object.scale.set(scale, scale, scale);
 
-            // B. 强力赋予材质
+            // B. 【核心诊断】强制变为红色骨架
+            let meshCount = 0;
             object.traverse((child) => {
+                // 打印每一个子对象的类型，看看是不是 Mesh
+                console.log("发现对象:", child.type, child.name);
+
                 if (child.isMesh) {
-                    // 使用 MeshBasicMaterial，即使没光也能看清，且不受 mtl 影响
+                    meshCount++;
+                    // 强制使用红色线框材质
                     child.material = new THREE.MeshBasicMaterial({
-                        map: bodyTexture,
+                        color: 0xff0000,    // 纯红色
+                        wireframe: true,    // 只要线条
                         side: THREE.DoubleSide
                     });
                 }
             });
 
             scene.add(object);
-            document.getElementById('info').innerHTML = "加载完成！";
-
-        }, (xhr) => {
-            if(xhr.lengthComputable) {
-                const percent = Math.round((xhr.loaded / xhr.total) * 100);
-                document.getElementById('info').innerHTML = `下载中: ${percent}%`;
+            
+            if (meshCount > 0) {
+                document.getElementById('info').innerHTML = `检测到 ${meshCount} 个网格部件，已显示红色骨架`;
+            } else {
+                document.getElementById('info').innerHTML = "警告：模型文件中没有发现 Mesh (网格)！";
             }
-        }, (error) => {
+
+        }, undefined, (error) => {
             console.error(error);
-            document.getElementById('info').innerHTML = "加载失败，请检查 Console";
+            document.getElementById('info').innerHTML = "加载错误，请看 Console";
         });
 
         function animate() {

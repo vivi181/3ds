@@ -2,9 +2,8 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <title>3D Whale Viewer</title>
+    <title>3D Whale Viewer - Final Fix</title>
     <style>
-        /* 移除默认边距，防止滚动条 */
         body { margin: 0; overflow: hidden; background-color: #333; }
         #info {
             position: absolute;
@@ -15,8 +14,9 @@
             font-family: Arial, sans-serif;
             pointer-events: none;
             z-index: 10;
-            background-color: rgba(0,0,0,0.5); /* 半透明背景让文字更清晰 */
-            padding: 5px 0;
+            background-color: rgba(0,0,0,0.5);
+            padding: 10px 0;
+            font-size: 16px;
         }
     </style>
     <script type="importmap">
@@ -29,7 +29,7 @@
     </script>
 </head>
 <body>
-    <div id="info">正在初始化...</div>
+    <div id="info">初始化中...</div>
 
     <script type="module">
         import * as THREE from 'three';
@@ -37,50 +37,45 @@
         import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
         import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
 
-        // 1. 基础场景设置
+        // --- 1. 场景初始化 ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x333333); // 深灰色背景
+        scene.background = new THREE.Color(0x333333); // 深灰背景
 
-        // 添加辅助网格 (地面) - 如果看到这个，说明渲染器工作正常
+        // 辅助工具：网格和坐标轴
         const gridHelper = new THREE.GridHelper(20, 20);
         scene.add(gridHelper);
-
-        // 添加坐标轴 (红=X, 绿=Y, 蓝=Z)
-        const axesHelper = new THREE.AxesHelper(5);
+        const axesHelper = new THREE.AxesHelper(5); // 红=X 绿=Y 蓝=Z
         scene.add(axesHelper);
 
-        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(5, 5, 10); // 相机位置
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 5000);
+        camera.position.set(5, 5, 10);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        // 2. 灯光 (前后左右上下都有光，防止模型太黑)
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
+        // --- 2. 灯光设置 (全方位打光，防止全黑) ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); 
         scene.add(ambientLight);
         
         const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-        dirLight.position.set(5, 10, 7);
+        dirLight.position.set(10, 20, 10);
         scene.add(dirLight);
-        
+
         const backLight = new THREE.DirectionalLight(0xffffff, 0.5);
-        backLight.position.set(-5, -5, -10);
+        backLight.position.set(-10, -10, -10);
         scene.add(backLight);
 
-        // 3. 控制器
+        // --- 3. 控制器 ---
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
 
-        // 4. 加载模型
+        // --- 4. 加载逻辑 ---
         const mtlLoader = new MTLLoader();
-        
-        // --- 核心修改：文件名设定为 j ---
-        const fileName = 'j'; 
-        // -----------------------------
+        const fileName = 'j'; // 你的文件名 j.obj / j.mtl
 
-        document.getElementById('info').innerHTML = "正在下载材质文件 (j.mtl)...";
+        document.getElementById('info').innerHTML = "正在下载 j.mtl ...";
 
         mtlLoader.load(`${fileName}.mtl`, (materials) => {
             materials.preload();
@@ -88,53 +83,74 @@
             const objLoader = new OBJLoader();
             objLoader.setMaterials(materials);
             
-            document.getElementById('info').innerHTML = "正在下载模型文件 (j.obj)...";
+            document.getElementById('info').innerHTML = "正在下载 j.obj ...";
 
             objLoader.load(`${fileName}.obj`, (object) => {
                 
-                // --- 自动修复位置和大小的核心代码 ---
-                
-                // 1. 获取模型的包围盒
+                // === 核心修复逻辑开始 ===
+
+                // A. 计算尺寸和中心
                 const box = new THREE.Box3().setFromObject(object);
                 const size = box.getSize(new THREE.Vector3());
                 const center = box.getCenter(new THREE.Vector3());
-
+                
                 console.log("模型原始尺寸:", size);
                 console.log("模型原始中心:", center);
 
-                // 2. 居中模型 (抵消掉原始模型的偏移)
+                // B. 居中模型
                 object.position.x -= center.x;
                 object.position.y -= center.y;
                 object.position.z -= center.z;
 
-                // 3. 自动缩放 (统一缩放到 5 个单位大小)
+                // C. 缩放模型 (统一缩放到5米大小)
                 const maxDim = Math.max(size.x, size.y, size.z);
-                const scaleFactor = 5 / (maxDim || 1); 
-                object.scale.set(scaleFactor, scaleFactor, scaleFactor);
+                const scale = 5 / (maxDim || 1);
+                object.scale.set(scale, scale, scale);
+
+                // D. 强制显形遍历 (解决隐形问题)
+                object.traverse((child) => {
+                    if (child.isMesh) {
+                        console.log("修复Mesh材质:", child.name);
+                        
+                        // 1. 强制双面显示 (防止法线反转看不见)
+                        child.material.side = THREE.DoubleSide;
+                        
+                        // 2. 强制关闭透明 (防止 d 0 导致的隐形)
+                        child.material.transparent = false;
+                        child.material.opacity = 1.0;
+                        
+                        // 3. 确保深度写入
+                        child.material.depthWrite = true;
+
+                        // 4. (备用) 如果你想测试模型是否真的存在，取消下面这行的注释
+                        // 这会让模型变成纯红色，忽略贴图
+                        // child.material = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide });
+                    }
+                });
+
+                // === 核心修复逻辑结束 ===
 
                 scene.add(object);
                 
-                document.getElementById('info').innerHTML = "加载完成！按住左键旋转，右键平移，滚轮缩放";
-                console.log("模型已修正并添加到场景");
+                document.getElementById('info').innerHTML = "加载完成！<br>如果不显示，请查看Console日志";
+                console.log("模型已添加至场景");
 
             }, (xhr) => {
                 if (xhr.lengthComputable) {
                     const percent = Math.round((xhr.loaded / xhr.total) * 100);
-                    document.getElementById('info').innerHTML = `模型加载中: ${percent}%`;
+                    document.getElementById('info').innerHTML = `模型下载中: ${percent}%`;
                 }
             }, (error) => {
-                console.error('加载OBJ失败:', error);
-                document.getElementById('info').innerHTML = "OBJ加载失败，请看F12控制台";
+                console.error('OBJ加载失败:', error);
+                document.getElementById('info').innerHTML = "OBJ加载失败 (404?)";
             });
 
-        }, (xhr) => {
-            // MTL 加载进度
         }, (error) => {
-            console.error('加载MTL失败:', error);
-            document.getElementById('info').innerHTML = "MTL加载失败 (检查文件名j.mtl?)";
+            console.error('MTL加载失败:', error);
+            document.getElementById('info').innerHTML = "MTL加载失败 (检查文件名 j.mtl)";
         });
 
-        // 5. 动画循环
+        // --- 5. 渲染循环 ---
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
@@ -142,7 +158,6 @@
         }
         animate();
 
-        // 窗口大小适配
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();

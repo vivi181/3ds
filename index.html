@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Whale Viewer</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #333; }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            pointer-events: none;
+            z-index: 10;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="info">正在加载模型...<br>左键旋转，右键平移，滚轮缩放</div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+        import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+
+        // 1. 初始化场景、相机和渲染器
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xa0a0a0); // 背景色
+        // 添加环境雾气，让远处更自然
+        scene.fog = new THREE.Fog(0xa0a0a0, 10, 50);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(5, 5, 10); // 设置相机初始位置
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true }); // 开启抗锯齿
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        // 2. 添加灯光 (没有灯光模型就是黑的)
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // 环境光
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1); // 平行光（模仿太阳）
+        dirLight.position.set(5, 10, 7);
+        scene.add(dirLight);
+
+        // 3. 添加控制器 (鼠标交互)
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; // 开启阻尼，更有手感
+
+        // 4. 加载 MTL 材质 和 OBJ 模型
+        const mtlLoader = new MTLLoader();
+        
+        // --- 请在这里修改你的文件名 ---
+        const fileName = 'model'; // 假设你的文件叫 model.obj 和 model.mtl
+        // ---------------------------
+
+        mtlLoader.load(`${fileName}.mtl`, (materials) => {
+            materials.preload();
+            
+            const objLoader = new OBJLoader();
+            objLoader.setMaterials(materials); // 关键：把材质赋给模型加载器
+            
+            objLoader.load(`${fileName}.obj`, (object) => {
+                
+                // 自动调整模型大小和位置，确保它在屏幕中心
+                const box = new THREE.Box3().setFromObject(object);
+                const size = box.getSize(new THREE.Vector3());
+                const center = box.getCenter(new THREE.Vector3());
+                
+                // 居中模型
+                object.position.x += (object.position.x - center.x);
+                object.position.y += (object.position.y - center.y);
+                object.position.z += (object.position.z - center.z);
+                
+                scene.add(object);
+                
+                document.getElementById('info').innerHTML = "模型加载完成！";
+                console.log("模型加载成功", object);
+
+            }, (xhr) => {
+                // 加载进度
+                if (xhr.lengthComputable) {
+                    const percentComplete = xhr.loaded / xhr.total * 100;
+                    console.log('加载进度: ' + Math.round(percentComplete, 2) + '%');
+                }
+            }, (error) => {
+                console.error('加载出错:', error);
+                document.getElementById('info').innerHTML = "加载出错，请查看控制台 (F12)";
+            });
+        });
+
+        // 5. 渲染循环
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // 窗口大小调整处理
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

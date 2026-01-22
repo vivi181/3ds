@@ -2,12 +2,13 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <title>3D Whale Viewer - Manual Texture</title>
+    <title>3D Whale - 强力贴图版</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #333; }
+        /* ⚠️ 注意：我把背景改成了深蓝色，方便你确认代码是否更新 */
+        body { margin: 0; overflow: hidden; background-color: #001e36; }
         #info {
             position: absolute; top: 10px; width: 100%; text-align: center;
-            color: white; font-family: Arial, sans-serif; pointer-events: none;
+            color: #fff; font-family: Arial, sans-serif; pointer-events: none;
             z-index: 10; background-color: rgba(0,0,0,0.5); padding: 10px 0;
         }
     </style>
@@ -21,7 +22,7 @@
     </script>
 </head>
 <body>
-    <div id="info">正在启动强力加载模式...</div>
+    <div id="info">如果背景不是深蓝色，请强制刷新！</div>
 
     <script type="module">
         import * as THREE from 'three';
@@ -30,9 +31,9 @@
 
         // 1. 场景设置
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x333333);
+        scene.background = new THREE.Color(0x001e36); // 深蓝色背景
         
-        // 辅助网格 (确保Three.js在运行)
+        // 辅助网格
         scene.add(new THREE.GridHelper(20, 20)); 
         scene.add(new THREE.AxesHelper(5));
 
@@ -46,80 +47,71 @@
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
 
-        // 灯光 (虽然用了Basic材质不需要光，但为了以防万一加上)
+        // 灯光
         scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(5, 10, 5);
+        scene.add(dirLight);
 
-        // 2. 手动加载贴图 (绕过 .mtl 文件)
+        // 2. 手动加载贴图 (绕过 .mtl)
         const textureLoader = new THREE.TextureLoader();
         
-        // 加载身体贴图
+        // ⚠️ 确保这个文件名和 GitHub 上一模一样！
         const bodyTexture = textureLoader.load('whale_sp1_body_BaseColor.png', 
-            () => console.log("身体贴图加载成功"),
+            () => console.log("贴图加载成功"),
             undefined,
-            (err) => console.error("身体贴图加载失败 (检查文件名):", err)
+            (err) => console.error("贴图加载失败:", err)
         );
-        bodyTexture.colorSpace = THREE.SRGBColorSpace; // 颜色校正
+        bodyTexture.colorSpace = THREE.SRGBColorSpace;
 
-        // 3. 加载 OBJ 模型
+        // 3. 加载 OBJ
         const objLoader = new OBJLoader();
-        const fileName = 'j.obj'; // 你的模型文件
+        const fileName = 'j.obj'; 
 
-        document.getElementById('info').innerHTML = "正在直接读取 j.obj ...";
+        document.getElementById('info').innerHTML = "正在下载模型...";
 
         objLoader.load(fileName, (object) => {
             
-            // --- 核心修复逻辑 ---
-
-            // A. 强制计算并居中
+            // A. 自动缩放与居中
             const box = new THREE.Box3().setFromObject(object);
             const size = box.getSize(new THREE.Vector3());
             const center = box.getCenter(new THREE.Vector3());
             
-            console.log("模型尺寸:", size);
+            // 注意：这里的新日志没有“原始”二字，以此区分新旧代码
+            console.log("模型尺寸:", size); 
 
-            // 居中
             object.position.x -= center.x;
             object.position.y -= center.y;
             object.position.z -= center.z;
 
-            // 缩放 (统一变成 5 米大)
             const maxDim = Math.max(size.x, size.y, size.z);
             const scale = 5 / (maxDim || 1);
             object.scale.set(scale, scale, scale);
 
-            // B. 【最关键一步】手动给模型穿衣服
+            // B. 强力赋予材质
             object.traverse((child) => {
                 if (child.isMesh) {
-                    console.log("找到模型部件:", child.name);
-                    
-                    // 创建一个全新材质，强制使用身体贴图
-                    // 使用 MeshBasicMaterial 不受光照影响，防止因为没灯光变黑
-                    const newMaterial = new THREE.MeshBasicMaterial({
-                        map: bodyTexture,       // 贴图
-                        side: THREE.DoubleSide, // 双面渲染 (防止背面透明)
-                        transparent: false,     // 关闭透明
-                        opacity: 1
+                    // 使用 MeshBasicMaterial，即使没光也能看清，且不受 mtl 影响
+                    child.material = new THREE.MeshBasicMaterial({
+                        map: bodyTexture,
+                        side: THREE.DoubleSide
                     });
-
-                    child.material = newMaterial;
                 }
             });
 
             scene.add(object);
-            document.getElementById('info').innerHTML = "加载完成！<br>如果不显示，就是图片文件名写错了";
+            document.getElementById('info').innerHTML = "加载完成！";
 
         }, (xhr) => {
-            // 进度条
             if(xhr.lengthComputable) {
                 const percent = Math.round((xhr.loaded / xhr.total) * 100);
-                document.getElementById('info').innerHTML = `模型下载中: ${percent}%`;
+                document.getElementById('info').innerHTML = `下载中: ${percent}%`;
             }
         }, (error) => {
             console.error(error);
-            document.getElementById('info').innerHTML = "加载失败，请看F12控制台";
+            document.getElementById('info').innerHTML = "加载失败，请检查 Console";
         });
 
-        // 动画循环
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
